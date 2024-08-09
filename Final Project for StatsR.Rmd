@@ -1,0 +1,270 @@
+---
+title: "Laptop Data Analysis"
+output:
+  html_document: default
+  pdf_document: default
+date: "2024-04-22"
+---
+
+```{r}
+library(tidyverse)
+library(openintro)
+library(ppcor)
+library(lm.beta)
+library(DataExplorer)
+library(corrgram)
+```
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+laptop <-read.csv("Cleaned_Laptop_data.csv")
+```
+
+
+##Introduction
+My project is on Laptop data that was taken in March of 2022. It contains a ton of variables whether it be the Brand of laptop, specific parts in the laptop including: processor, ram, sdd, and display size. The processor is what runs a laptops operating system and applications. The ram is a form of electronic computer memory. The ssd is a solid-state drive providing persistent data storage. The display size is the size of the laptop screen in inches. A couple other variables I make use of are star_rating, the number of stars people rated the laptop 0-5, ratings, the number of ratings the laptop got, and old_price and latest_price, which are the prices of the laptop when first on the market to now(which is march 2022), and the units for the prices are twp decimal places to the left so 16990 is actually $169.90. In this project I am mainly trying to find relationships between the computer parts and the star ratings that those laptops received.
+
+
+
+#Diving into the data
+The first variables that I noticed and found to be the most interesting were the star_rating and ratings and I wanted to see what variables affect these and to see if they are related in anyway.
+
+```{r}
+ggplot(data = laptop, mapping= aes(star_rating, ratings))+
+  geom_point()
+```
+Seeing how there are two outliers I wanted to create a plot that was easier to see because the points seem to be bunched up there at the bottom. But just by looking at this it seems that the more reviews a laptop gets the better the star rating is on average. I also may want to look at those two individual outliers later to see what they are and why they got so many reviews.
+
+```{r}
+laptop %>% 
+  filter(ratings < 7500) %>% 
+  ggplot(mapping= aes(star_rating, ratings))+
+    geom_point()
+```
+It looks like this plot just further supports my observations in the first it just looks a little bit better without those outliers. So now I want to look at if the brand has anything to do with the star_ratings how they're affected by it.
+```{r}
+ggplot(data = laptop, mapping= aes(star_rating, ratings))+
+  geom_point(aes(color = brand))
+  
+```
+Although we can gather a ton of information from this plot, it seems like there are so many brands and I want to clean this up for only the biggest competitors, so lets see which brands have the most laptops in this dataset and work from there.
+
+
+```{r}
+laptop %>% 
+  group_by(brand) %>% 
+  summarise(n= n()) %>% 
+  arrange(desc(n))
+  
+```
+As we can see from this there are 13 Laptop brands that only have 5 entries or less meaning if I take the top 8 Brands my analysis would be more significant, so I'm going to create a new dataframe with just these top 8 brands and call it heavy hitters.
+
+```{r}
+heavy_hitters <- laptop %>% 
+  filter(brand %in% c("ASUS","DELL","Lenovo","HP","acer","MSI","APPLE","Avita"))
+```
+So this new data frame only takes out 42 observations but it will help clean up further analysis with those outliers gone from the equation. So now we can redo our last plot to see if its easier to look at.
+```{r}
+ggplot(data = heavy_hitters, mapping= aes(star_rating, ratings))+
+  geom_point(aes(color = brand))
+  
+```
+As we can see this plot is way less clustered and we can that some brands more consistently be higher ratings than others. Every HP, acer, APPLE, and MSI laptops don't have any star-ratings under 3 whereas Lenovo, Avita, ASUS, and DELL have laptops that trickle under 3. By looking at where the 0 star rating is on the plot we can see that no laptop has a rating of 0 because they have no reviews. We can confirm this using an arrange function and filtering by ratings above 0.
+```{r}
+heavy_hitters %>% 
+  dplyr::select(brand, star_rating, ratings) %>% 
+  filter(ratings > 0) %>% 
+  group_by(star_rating) %>% 
+  arrange(star_rating)
+```
+By looking at this we can see that DELL has the two lowest rated laptops in our heavy hitters set but Lenovo has the lowest rated Laptop with 70 reviews meaning it had to be pretty bad to get 70 reviews.
+
+I want to now look at what these heavy hitters have in common in regards to their specifications to see if they're similar or all over the place. For this I'm going to do a series of bar charts look at the counts of each computer part I want to look at.
+
+```{r}
+ggplot( data = heavy_hitters) +
+  geom_bar( aes(processor_brand))
+
+ggplot( data = heavy_hitters) +
+  geom_bar( aes(ram_gb))
+
+ggplot( data = heavy_hitters) +
+  geom_bar( aes(ssd))
+
+ggplot( data = heavy_hitters) +
+  geom_bar( aes(display_size))
+```
+As we can see from the following bar charts there are a few parts that have a significant lead compared to the rest. It seems that Intel processors, 8 Gigabytes of Ram, 512 ssd, and 15.6 inch screen displays are the most popular among the heavy hitters. I wonder if these variables have any correlation with the star_rating? Lets find out.
+
+```{r}
+ggplot(heavy_hitters) +
+  geom_point(aes(x = star_rating, y = processor_brand))
+
+ggplot(heavy_hitters) +
+  geom_point(aes(x = star_rating, y = ram_gb))
+
+ggplot(heavy_hitters) +
+  geom_point(aes(x = star_rating, y = ssd))
+
+ggplot(heavy_hitters) +
+  geom_point(aes(x = star_rating, y = display_size))
+```
+After trying to find if these variables were correlated with star_rating I found that this sort of test wouldn't work because they are both categorical variables. So now I will compute a chisquare test to see if they are significant for star ratings above 3.5 and the top 2 or 1 when it comes to count in each variable (ex: processor brand = intel and AMD)
+
+```{r}
+(chisq_data_proBrand <-heavy_hitters %>% 
+  filter(processor_brand %in% c("Intel","AMD")) %>% 
+   filter(star_rating >= 3.5) %>% 
+  dplyr::select(processor_brand, star_rating) %>% 
+  table())
+
+
+(chisq_data_ram <-heavy_hitters %>% 
+  filter(ram_gb %in% c(8,16)) %>% 
+   filter(star_rating >= 3.5) %>% 
+  dplyr::select(ram_gb, star_rating) %>% 
+  table())
+
+
+(chisq_data_ssd <-heavy_hitters %>% 
+  filter(ssd %in% c(512)) %>% 
+   filter(star_rating >= 3.5) %>% 
+  dplyr::select(ssd, star_rating) %>% 
+  table())
+
+
+(chisq_data_disp <-heavy_hitters %>% 
+  filter(display_size %in% c(15.6,14)) %>% 
+   filter(star_rating >= 3.5) %>% 
+  dplyr::select(display_size, star_rating) %>% 
+  table())
+```
+```{r}
+chisq.test(chisq_data_proBrand)
+```
+This shows that processor brand is significant with a p-value of 0.03151 so we reject the null hypothesis, telling us there is a relationship between high star rating and processor brand.
+
+```{r}
+chisq.test(chisq_data_ram)
+```
+This shows that ram_gb is very significant with a p-value of 2.257e-05 so we reject the null hypothesis, telling us there is a relationship between high star rating and ram_GB size.
+
+```{r}
+chisq.test(chisq_data_ssd)
+```
+This shows that ssd is very significant with a p-value of < 2.2e-16 so we reject the null hypothesis, telling us there is a relationship between high star rating and ssd.
+
+```{r}
+chisq.test(chisq_data_disp)
+```
+This shows that display size is not significant with a p-value of 0.1709 so we fail to reject the null hypothesis, telling us there is a no relationship between high star rating and display size.
+
+
+Although 3 out of the 4 of these are significant the X-squared values aren't that high with the highest being 265.29 in the ssd test. From here I wanted to try and checkout the t-test of these same groups, with the star_rating versus the top two processor brands, ram_gb, ssd's, and display sizes.
+
+```{r}
+tBrandData <- heavy_hitters %>% 
+  filter(processor_brand %in% c("Intel","AMD"))
+  
+t.test(star_rating ~ processor_brand, data = tBrandData)
+```
+Based off of this t-test we find that the p-value is not less than 0.05 so we fail to reject the null hypothesis stating that there is not a significant difference between star rating of the processor brands AMD and Intel.
+
+```{r}
+tRamData <- heavy_hitters %>% 
+  filter(ram_gb %in% c(8,16))
+  
+t.test(star_rating ~ ram_gb, data = tRamData)
+```
+Based off of this t-test we find that the p-value is way less than 0.05 meaning we reject the null hypothesis indicating that there is a significant difference between star ratings of ram size of 8GB and 16 GB.
+
+```{r}
+tSsdData <- heavy_hitters %>% 
+  filter(ssd %in% c(256,512))
+  
+t.test(star_rating ~ ssd, data = tSsdData)
+```
+Based off of this t-test we find that the p-value is not less than 0.05 so we fail to reject the null hypothesis stating that there is not a significant difference between star rating of the SSD size of 512GB and 256GB.
+
+```{r}
+tDispData <- heavy_hitters %>% 
+  filter(display_size %in% c(15.6,14))
+  
+t.test(star_rating ~ display_size, data = tDispData)
+```
+Based off of this t-test we find that the p-value is less than 0.05 meaning we reject the null hypothesis indicating that there is a significant difference between star ratings of display size of 15.6in and 14in.
+
+
+
+After finding some significance with the t-test I wanted to move on and look to see if there would be some other variables that might be correlated to star_rating so I went to figure that out with the variables old_price, latest_price, and ratings.
+```{r}
+cor(heavy_hitters$latest_price, heavy_hitters$star_rating)
+```
+```{r}
+cor(heavy_hitters$old_price, heavy_hitters$star_rating)
+```
+```{r}
+cor(heavy_hitters$ratings, heavy_hitters$star_rating)
+```
+
+And surprisingly after looking at the correlation between all of these variables there isn't any significant correlation between star rating and latest_price, old_price, and ratings with the highest correlation being 0.21 between star_rating and ratings which I thought would be the highest but it is still a pretty weak correlation.
+While we're on the topic of pricing I'm curious to see the average latest price and old price of laptops with a star rating 4 and above.
+```{r}
+heavy_hitters %>% 
+  filter(star_rating >= 4) %>% 
+  dplyr::select(brand, star_rating, old_price) %>% 
+  group_by(brand, star_rating) %>% 
+  summarise(oldPmean = mean(old_price)) %>% 
+  arrange(desc(star_rating))
+```
+```{r}
+heavy_hitters %>% 
+  filter(star_rating >= 4) %>% 
+  dplyr::select(brand, star_rating, latest_price) %>% 
+  group_by(brand, star_rating) %>% 
+  summarise(latPmean = mean(latest_price)) %>% 
+  arrange(desc(star_rating))
+```
+So after looking at both of these it might be weird to look at but these pricing values are pretty deceiving. The laptops are not actually hundreds of thousands of dollars the decimal place is just supposed to be two places to the left. After analyzing the data it seems that typically the higher star rating the laptop has the more expensive it is. Of course this isn't always the case but it would make sense, the more you pay equals the better quality laptop. Now that got me thinking because I ran the previous correlations on the whole heavy hitters dataframe maybe there wasn't much correlation but here there seems to be. Lets test it out.
+```{r}
+newlatestprice_stars <- heavy_hitters %>% 
+  filter(star_rating >= 4) %>% 
+  dplyr::select(star_rating, latest_price)
+```
+```{r}
+cor(newlatestprice_stars)
+```
+```{r}
+newoldprice_stars <- heavy_hitters %>% 
+  filter(star_rating >= 4) %>% 
+  dplyr::select(star_rating, old_price)
+```
+```{r}
+cor(newoldprice_stars)
+```
+So after running the correlation on these new dataframes we see the correlation went up a good amount for both latest_price and old_price when being compared to star_ratings that are above or equal to 4. Although the correlation amount isnt anything crazy it is still a good amount to see a difference.
+
+
+
+
+After seeing little correlation between these variables I wanted to look at something else in the dataframe. Theres a boolean variable of touchscreen that I'd like to check out because it seems so random but could be cool. I'm thinking that brands of laptops with a touch screen could have lower ratings overall because they could be gimmicky but lets check it out.
+
+```{r}
+heavy_hitters %>%
+  ggplot()+
+  geom_point(mapping = aes(star_rating,brand)) +
+  facet_wrap(~Touchscreen)
+```
+So from our plots it looks like laptops with touchscreens have over all good ratings (again the ratings with 0 have no reviews so they are default to 0). Another interesting thing here is that Apple and Avita have no laptops with touchscreens, opposed to every other brand which has at least tried once.
+
+
+
+##Conclusion
+Through this analysis I found that it was pretty difficult to find relationships between any of the variables in this data set and the star_rating the laptops received. I really wanted to see if there was a specific reason why these laptops were getting higher star ratings than others but with the lack of lower star ratings it made it a bit more difficult than I had originally thought. A lot of my predictions were false when I looked at the analysis but that is all apart of analyzing data and its more fun when you get proved wrong anyway. If I were to do more analysis on this data I would go see if the prices and the different specifications of the laptops have any correlation finding out which parts are the most expensive compared to others.
+
+
+##Websites that helped
+https://www.quora.com/What-are-the-hardware-components-of-a-laptop
